@@ -45,7 +45,7 @@ EOF
 check_files() {
     # check input files exist 
     if [[ ! -f "$INPUT_DIR/transactions_$1.csv" || ! -f "$INPUT_DIR/customers_$1.csv" || ! -f "$INPUT_DIR/app_$1.log"  ]]; then
-        echo "Some or all files don't exist, existing..."
+        echo "Warn: Some or all files don't exist, existing..."
         exit 1
     fi 
 }
@@ -97,7 +97,7 @@ log() {
     local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
     # format and append to log file
-    if [[ ! dry_run ]]; then
+    if [[ "$dry_run" != "true" ]]; then
         echo "[$timestamp] [$log_level] - $message" >> "$LOG_DIR/process_$today.csv"
     else
         echo "[$timestamp] [$log_level] - $message"
@@ -109,10 +109,14 @@ log "INFO" "Starting daily transaction processing job"
 echo "Creating output files..."
 log "INFO" "Creating needed files for processing"
 
-touch "$OUTPUT_DIR/clean_transactions_$today.csv"
-touch "$REJECT_DIR/rejected_transactions_$today.csv"
-touch "$LOG_DIR/process_$today.csv"
-touch "$ARCHIVE_DIR/transactions_$today.csv"
+
+# create files only if not dry run
+if [[ "$dry_run" != "true" ]]; then
+    touch "$OUTPUT_DIR/clean_transactions_$today.csv"
+    touch "$REJECT_DIR/rejected_transactions_$today.csv"
+    touch "$LOG_DIR/process_$today.csv"
+    touch "$ARCHIVE_DIR/transactions_$today.csv"
+fi
 
 log "INFO" "cleaning transaction file: $INPUT_DIR/transactions_$run_date.csv"
 
@@ -123,60 +127,64 @@ declare -A seen_txns
 
 while IFS="," read -r txn_id customer_id txn_date amount status src_file; do
     if [[ -z "$txn_id" ]]; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Not valid txn_id: $txn_id"
             echo "Not valid txn_id, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: Not valid txn_id: $txn_id"
         fi
     elif [[ -z "$customer_id" ]]; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "No customer id"
             echo "No customer id, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: No customer id"
         fi
     elif [[ ! $txn_date =~ $pattern ]]; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Bad date format"
             echo "Bad date format, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: Bad date format"
         fi
     elif ! [[ "$amount" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Invalid amount: $amount"
             echo "Invalid amount: $amount,$txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: Invalid amount: $amount"
         fi
     elif ! awk "BEGIN { exist ($amount >= $MIN_AMOUNT && $amount <= $MAX_AMOUNT) }"; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Amount out of range: $amount"
             echo "Amount out of range: $amount,$txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: Amount out of range: $amount"
         fi
     elif [[  ",$VALID_STATUSES," != *",$status,"*  ]]; then
-        if [[ ! dry_run ]]; then
+        if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Invalid status: $status"
             echo "Invalid status: $status, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
         else
             echo "ERROR: Invalid status: $status"
         fi
-    elif ! grep -qw "$customer_id" <<< "$customer_ids"; then 
-        log "ERROR" "Invalid customer ID: $customer_id"
-        echo "Invalid customer ID: $customer_id, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
+    elif ! grep -qw "$customer_id" <<< "$customer_ids"; then
+        if [[ "$dry_run" != "true" ]]; then 
+            log "ERROR" "Invalid customer ID: $customer_id"
+            echo "Invalid customer ID: $customer_id, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
+        else
+            echo "ERROR: Invalid customer ID: $customer_id"
+        fi
     else
         if [[ -n "${seen_txns[$txn_id]+exists}" ]]; then
-            if [[ ! dry_run ]]; then
+            if [[ "$dry_run" != "true" ]]; then
                 log "ERROR" "Duplicate txn ID: $txn_id"
                 echo "Duplicate txn ID, $txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
             else
                 echo "ERROR: Duplicate txn ID: $txn_id"
             fi
         else
-            if [[ ! dry_run ]]; then
+            if [[ "$dry_run" != "true" ]]; then
                 seen_txns[$txn_id]=1
                 log "INFO" "Valid Transaction processed: $txn_id"
                 echo "$txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$OUTPUT_DIR/clean_transactions_$today.csv"
@@ -191,61 +199,68 @@ log "INFO" "cleaning transaction file completed"
 
 # SUMMARY REPORT
 
-touch $OUTPUT_DIR/summary_$today.txt
-SUMMARY_FILE="$OUTPUT_DIR/summary_$today.txt"
-
-log "INFO" "Creating summary report $OUTPUT_DIR/summary_$today.txt"
-
-total_transactions=$(($(wc -l < "$INPUT_DIR/transactions_20260624.csv") - 1))
-valid_rows=$(wc -l < "$OUTPUT_DIR/clean_transactions_$today.csv")
-rejected_rows=$(wc -l < "$REJECT_DIR/rejected_transactions_$today.csv")
-
-#VALID_STATUSES="PAID,FAILED,PENDING,REFUNDED"
-
-paid_count=$(grep -c "PAID" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
-failed_count=$(grep -c  "FAILED" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
-pending_count=$(grep -c "PENDING" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
-refunded_count=$(grep -c "REFUNDED" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
-
-top5_paid_customers=$(
-    awk -F, '$5 == "PAID" { total[$2] += 4} END { for (c in total) print c, total[c] }' "$OUTPUT_DIR/clean_transactions_$today.csv" | 
-    sort -k2,2nr | 
-    head -5
-)
+if [[ "$dry_run" != "true" ]]; then
+    touch $OUTPUT_DIR/summary_$today.txt
+    SUMMARY_FILE="$OUTPUT_DIR/summary_$today.txt"
+    log "INFO" "Creating summary report $OUTPUT_DIR/summary_$today.txt"
 
 
-error_lines_count=$(grep -c "|ERROR|" "$INPUT_DIR/app_20260624.log" || true)
-top5_errors=$(
-    grep -i error inbound/app_20260624.log | 
-    awk -F"|" '{ print $4 }' | 
-    sort |  
-    uniq -c |
-    sort -nr |
-    head -5
-)
+    total_transactions=$(($(wc -l < "$INPUT_DIR/transactions_20260624.csv") - 1))
+    valid_rows=$(wc -l < "$OUTPUT_DIR/clean_transactions_$today.csv")
+    rejected_rows=$(wc -l < "$REJECT_DIR/rejected_transactions_$today.csv")
 
-if [[ ! dry_run ]]; then
+    #VALID_STATUSES="PAID,FAILED,PENDING,REFUNDED"
+
+    paid_count=$(grep -c "PAID" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
+    failed_count=$(grep -c  "FAILED" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
+    pending_count=$(grep -c "PENDING" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
+    refunded_count=$(grep -c "REFUNDED" "$OUTPUT_DIR/clean_transactions_$today.csv" || true)
+
+    top5_paid_customers=$(
+        awk -F, '$5 == "PAID" { total[$2] += 4} END { for (c in total) print c, total[c] }' "$OUTPUT_DIR/clean_transactions_$today.csv" | 
+        sort -k2,2nr | 
+        head -5
+    )
+
+
+    error_lines_count=$(grep -c "|ERROR|" "$INPUT_DIR/app_20260624.log" || true)
+    top5_errors=$(
+        grep -i error inbound/app_20260624.log | 
+        awk -F"|" '{ print $4 }' | 
+        sort |  
+        uniq -c |
+        sort -nr |
+        head -5
+    )
+
     {
-        echo "total_transactions:${total_transactions:-0}" 
-        echo "valid_rows:${valid_rows:-0}" 
-        echo "rejected_rows:${rejected_rows:-0}" 
-        echo "paid_count:${paid_count:-0}" 
-        echo "failed_count:${failed_count:-0}" 
-        echo "pending_count:${pending_count:-0}" 
-        echo "refunded_count:${refunded_count:-0}" 
+            echo "total_transactions:${total_transactions:-0}" 
+            echo "valid_rows:${valid_rows:-0}" 
+            echo "rejected_rows:${rejected_rows:-0}" 
+            echo "paid_count:${paid_count:-0}" 
+            echo "failed_count:${failed_count:-0}" 
+            echo "pending_count:${pending_count:-0}" 
+            echo "refunded_count:${refunded_count:-0}" 
 
-        echo
-        echo "top5_paid_customers:"
-        echo "${top5_paid_customers:-0}" 
+            echo
+            echo "top5_paid_customers:"
+            echo "${top5_paid_customers:-0}" 
 
-        echo
-        echo "error_lines_count: ${error_lines_count:-0}" 
+            echo
+            echo "error_lines_count: ${error_lines_count:-0}" 
 
-        echo
-        echo "top5_errors:" 
-        echo "${top5_errors:-0}"
+            echo
+            echo "top5_errors:" 
+            echo "${top5_errors:-0}"
     } > "$SUMMARY_FILE"
+    log "INFO" "Summary report created"
+    # ARCHIVE
+    cp -r "$INPUT_DIR"/* "$ARCHIVE_DIR"/
+
+    log "INFO" "Archiving source files completed"
+    log "INFO" "Daily transaction processing job completed"
 else
+    echo "RUNNING IN DRY-RUN SOME FIELDS WILL BE EMPTEY OR ZERO"
     echo "total_transactions:${total_transactions:-0}" 
     echo "valid_rows:${valid_rows:-0}" 
     echo "rejected_rows:${rejected_rows:-0}" 
@@ -265,13 +280,3 @@ else
     echo "top5_errors:" 
     echo "${top5_errors:-0}"
 fi
-
-log "INFO" "Summary report created"
-
-# ARCHIVE
-if [[ ! dry_run ]]; then
-    cp -r "$INPUT_DIR"/* "$ARCHIVE_DIR"/
-fi
-
-log "INFO" "Archiving source files completed"
-log "INFO" "Daily transaction processing job completed"
