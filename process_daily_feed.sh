@@ -115,7 +115,6 @@ if [[ "$dry_run" != "true" ]]; then
     touch "$OUTPUT_DIR/clean_transactions_$today.csv"
     touch "$REJECT_DIR/rejected_transactions_$today.csv"
     touch "$LOG_DIR/process_$today.csv"
-    touch "$ARCHIVE_DIR/transactions_$today.csv"
 fi
 
 log "INFO" "cleaning transaction file: $INPUT_DIR/transactions_$run_date.csv"
@@ -154,7 +153,7 @@ while IFS="," read -r txn_id customer_id txn_date amount status src_file; do
         else
             echo "ERROR: Invalid amount: $amount"
         fi
-    elif ! awk "BEGIN { exit ($amount >= $MIN_AMOUNT && $amount <= $MAX_AMOUNT) }"; then
+    elif awk "BEGIN { exit ($amount >= $MIN_AMOUNT && $amount <= $MAX_AMOUNT) }"; then
         if [[ "$dry_run" != "true" ]]; then
             log "ERROR" "Amount out of range: $amount"
             echo "Amount out of range: $amount,$txn_id,$customer_id,$txn_date,$amount,$status,$src_file" >> "$REJECT_DIR/rejected_transactions_$today.csv"
@@ -255,7 +254,7 @@ if [[ "$dry_run" != "true" ]]; then
     } > "$SUMMARY_FILE"
     log "INFO" "Summary report created"
     # ARCHIVE
-    cp -r "$INPUT_DIR"/* "$ARCHIVE_DIR"/
+    cp -r "$INPUT_DIR"/*"$run_date"* "$ARCHIVE_DIR"/
 
     log "INFO" "Archiving source files completed"
     log "INFO" "Daily transaction processing job completed"
