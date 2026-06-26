@@ -6,6 +6,6 @@ rm -fr archive/*
 rm -fr logs/*
 rm -fr output/*
 rm -fr rejects/*
-rm -f logging.csv
+rm -f invalid_transactions.csv
 
 clear

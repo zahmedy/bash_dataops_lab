@@ -1,11 +1,5 @@
-
-// 1. Read transactions CSV
-// 2. Read customers CSV
-// 3. Validate rows
-// 4. Count valid/rejected rows
-// 5. Count statuses
-// 6. Print top 5 paid customers
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException; // Used to handle errors
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,9 +44,7 @@ public class ProcessDailyFeed {
         List<Transaction> invalid_transactions = new ArrayList<>();
         Set<String> seenTxnIds = new HashSet<>();
         // Read transactions file
-        try {
-            Scanner reader = new Scanner(new File("./inbound/transactions_20260625.csv"));
-
+        try (Scanner reader = new Scanner(new File("./inbound/transactions_20260625.csv"))) {
             if (reader.hasNextLine()) {
                 reader.nextLine(); // skipped Header
             }
@@ -76,8 +68,6 @@ public class ProcessDailyFeed {
                 }
 
             }
-            // close the reader
-            reader.close();
         } catch (IOException e) {
             System.out.println("An error occurred: The file could not be opened.");
             e.printStackTrace();
@@ -127,6 +117,19 @@ public class ProcessDailyFeed {
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
                 .limit(5)
                 .forEach(entry -> System.out.println(entry.getKey() + " : " + entry.getValue()));
+
+        // Write invalid data file
+        try (FileWriter writer = new FileWriter("./invalid_transactions.csv")) {
+            writer.write("date,invalid_reason,txn_id,customer_id,amount,status,source_file\n");
+            for (Transaction transaction : invalid_transactions) {
+                writer.write(transaction.txnDate + "," + transaction.invalidReason + "," + transaction.txnId + ","
+                        + transaction.customerId + "," + transaction.amount + "," + transaction.status + ","
+                        + transaction.sourceFile + "\n");
+            }
+        } catch (IOException e) {
+            System.out.println("Error: Unable to write file");
+            e.printStackTrace();
+        }
 
     }
 
