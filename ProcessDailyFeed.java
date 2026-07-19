@@ -71,6 +71,7 @@ public class ProcessDailyFeed {
         } catch (IOException e) {
             System.out.println("An error occurred: The file could not be opened.");
             e.printStackTrace();
+            return; // stop if file can't be read
         }
         System.out.println("Valid transactions: " + valid_transactions.size());
         System.out.println("Invalid transactions: " + invalid_transactions.size());
