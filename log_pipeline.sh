@@ -73,6 +73,7 @@ clean_up() {
             if [[ $difference -gt 3600 ]]; then
                 rm -f "$file"
             fi
+            rm -f "${DIR}/*.tmp"
         done
         shopt -u nullglob
         for pid in "${pids[@]}"; do
@@ -92,8 +93,14 @@ trap clean_up INT TERM EXIT
 ###########################
 
 process_file () {
-        echo "Compressing $DIR/$1"
-        gzip -k "${DIR}"/"$1"
+        tmp_dir="$DIR/.hashed_files"
+        if ! mkdir "$tmp_dir"; then
+            echo "Error: enable to create $tmp_dir"
+            exit 1
+        fi
+        file="${DIR}"/"$1"
+        echo "Compressing $file"
+        gzip -c  > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
         echo "Hashing ${DIR}/$1.tar.gz"
         sha256sum "${DIR}"/"$1".tar.gz "$DIR"/"$1".tar.gz.sha256
         echo "Copying compressed logs in ${DIR} to remote storage"
