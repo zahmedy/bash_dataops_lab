@@ -3,15 +3,16 @@
 set -euo pipefail
 IFS=$'\n\t'
 LOCKFILE="/tmp/log_pipeline.lock"
+START_TIME=$(date +%Y-%m-%d_%H%M%S)
 
 VERBOSE=false
 DRY_RUN=false
 DIR=""
 MAX_JOBS=0
 BATCH_SIZE=0
-CURRENT_PID=-1
+pids=()
 
-while getopts "sjb:vd" opt; do
+while getopts "s:j:b:vd" opt; do
         case ${opt} in
                 s )
                         DIR=${OPTARG}
@@ -35,7 +36,7 @@ while getopts "sjb:vd" opt; do
                         ;;
                 *)
                         echo "Option - ${OPTARG} requires an argument." >&2
-                        exit1
+                        exit 1
                         ;;
         esac
 done
@@ -63,11 +64,28 @@ fi
 
 clean_up() {
         echo "Cleaning up.."
-        rm -f "${DIR}"/*.tar.*
-        kill -9 $CURRENT_PID
+        shopt -s nullglob
+        for file in "${DIR}"/*.tar.*; do
+            epoch=$(stat -c "%Y" "$file")
+            now=$(date +%s)
+            difference=$(( now - epoch))
+            # if older than 1 hour remove it
+            if [[ $difference -gt 3600 ]]; then
+                rm -f "$file"
+            fi
+        done
+        shopt -u nullglob
+        for pid in "${pids[@]}"; do
+            SIGTERM "$pid"
+            sleep 5
+            if kill -0 "$pid"; then
+                "Process $pid still running, trying sigkill"
+                kill -9 "$pid"
+            fi
+        done
 }
 
-trap cleanup INT TERM EXIT
+trap clean_up INT TERM EXIT
 
 ###########################
 # Worker
@@ -76,18 +94,18 @@ trap cleanup INT TERM EXIT
 process_file () {
         echo "Compressing $DIR/$1"
         gzip -k "${DIR}"/"$1"
-        echo "Hashing ${DIR}/$1.gz"
+        echo "Hashing ${DIR}/$1.tar.gz"
         sha256sum "${DIR}"/"$1".tar.gz "$DIR"/"$1".tar.gz.sha256
         echo "Copying compressed logs in ${DIR} to remote storage"
         echo "Complete"
 }
 
-for file in ${DIR}; do
+while read -r file; do
         while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do
                 wait -n
         done
         process_file "$file" &
-        CURRENT_PID=$!
-done
+        pids+=($!)
+done < <(find "${DIR}" -maxdepth 1)
 
 echo "All files in $DIR processed successfully"
