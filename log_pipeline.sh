@@ -3,8 +3,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 LOCKFILE="/tmp/log_pipeline.lock"
-START_TIME=$(date +%Y-%m-%d_%H%M%S)
 
+S3=""
 VERBOSE=false
 DRY_RUN=false
 DIR=""
@@ -93,23 +93,40 @@ trap clean_up INT TERM EXIT
 ###########################
 
 process_file () {
+        # check if dir exist
         tmp_dir="$DIR/.hashed_files"
-        if ! mkdir "$tmp_dir"; then
-            echo "Error: enable to create $tmp_dir"
-            exit 1
+        if [[ ! -d $tmp_dir ]]; then
+            if ! mkdir -p "$tmp_dir"; then
+                echo "Error: enable to create $tmp_dir"
+                exit 1
+            fi
         fi
         file="${DIR}"/"$1"
         echo "Compressing $file"
         gzip -c  > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
-        echo "Hashing ${DIR}/$1.tar.gz"
-        sha256sum "${DIR}"/"$1".tar.gz "$DIR"/"$1".tar.gz.sha256
+        echo "Hashing ${file}.gz"
+        hash=$(sha256sum "${file}".gz)
+        if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
+            sha256sum "${file}".gz "$tmp_dir"/"${file}".gz.sha256
+        else
+            echo "$file already processed"
+        fi
         echo "Copying compressed logs in ${DIR} to remote storage"
+        for hash_file in "$tmp_dir"/*; do
+            scp "$hash_file" "$S3"
+        done
         echo "Complete"
 }
 
 while read -r file; do
-        while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do
-                wait -n
+        nprocs=0
+        if [ -n "$MAX_JOBS" ]; then 
+            nprocs="$MAX_JOBS"
+        else
+            nprocs=$(nprocs)
+        fi
+        while (( $(jobs -rp | wc -l) >= "$nprocs" )); do
+            wait -n
         done
         process_file "$file" &
         pids+=($!)
