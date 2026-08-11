@@ -3,6 +3,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 LOCKFILE="/tmp/log_pipeline.lock"
+SYSLOG_REGEX="^([A-Z][a-z]{2}[[:space:]]+[0-9]+[[:space:]]+[0-9]{2}:[0-9]{2}:[0-9]{2}|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})"
 
 S3=""
 VERBOSE=false
@@ -103,21 +104,50 @@ process_file () {
                 exit 1
             fi
         fi
+        
         file="${DIR}"/"$1"
-        echo "Compressing $file"
-        gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
-        echo "Hashing ${file}.gz"
-        hash=$(sha256sum "${file}".gz | cut -d' ' -f1)
-        if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
-            sha256sum "${file}".gz "$tmp_dir"/"${file}".gz.sha256
-        else
-            echo "$file already processed"
+        corrupt_dir="$DIR/.corrupt"
+        if [[ ! -d $corrupt_dir ]]; then
+            if ! mkdir -p "$corrupt_dir"; then
+                echo "Error: enable to create $corrupt_dir"
+                exit 1
+            fi
         fi
-        echo "Copying compressed logs in ${DIR} to remote storage"
-        for hash_file in "$tmp_dir"/*; do
-            scp "$hash_file" "$S3"
-        done
-        echo "Complete"
+        
+        # check file for corruption
+        corrupted=false
+        while read -r line; do
+            [[ -z "$line" ]] && continue
+            
+            if echo "$line" | jq -e . >/dev/null 2>&1; then
+                continue
+            fi
+
+            if [[ "$line" =~ $SYSLOG_REGEX ]]; then 
+                continue
+            fi
+
+            echo "  [->] Quarantining $file to $corrupt_dir"
+            corrupted=true
+            break
+        done < "$file"
+
+        if [[ "$corrupted" == "false" ]]; then
+            echo "Compressing $file"
+            gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
+            echo "Hashing ${file}.gz"
+            hash=$(sha256sum "${file}".gz | cut -d' ' -f1)
+            if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
+                sha256sum "${file}".gz "$tmp_dir"/"${file}".gz.sha256
+            else
+                echo "$file already processed"
+            fi
+            echo "Copying compressed logs in ${DIR} to remote storage"
+            for hash_file in "$tmp_dir"/*; do
+                scp "$hash_file" "$S3"
+            done
+            echo "Complete"
+        fi
 }
 
 while read -r file; do
