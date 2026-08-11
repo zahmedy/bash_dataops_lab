@@ -127,8 +127,14 @@ while read -r file; do
         else
             nprocs=$(nproc)
         fi
-        while (( $(jobs -rp | wc -l) >= "$nprocs" )); do
+        while (( $(jobs -rp | wc -l) >= nprocs )); do
             wait -n
+            # prune done pids
+            for i in "${!pids[@]}"; do
+                if ! kill -0 "${pids[i]}" 2>/dev/null; then
+                    unset "pids[i]"
+                fi
+            done
         done
         process_file "$file" &
         pids+=($!)
