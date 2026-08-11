@@ -130,6 +130,6 @@ while read -r file; do
         done
         process_file "$file" &
         pids+=($!)
-done < <(find "${DIR}" -maxdepth 1)
+done < <(find "${DIR}" -maxdepth 1 -type file -name "*.log")
 
 echo "All files in $DIR processed successfully"
