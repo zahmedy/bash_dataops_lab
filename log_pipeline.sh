@@ -107,7 +107,7 @@ process_file () {
         echo "Compressing $file"
         gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
         echo "Hashing ${file}.gz"
-        hash=$(sha256sum "${file}".gz)
+        hash=$(sha256sum "${file}".gz | cut -d' ' -f1)
         if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
             sha256sum "${file}".gz "$tmp_dir"/"${file}".gz.sha256
         else
