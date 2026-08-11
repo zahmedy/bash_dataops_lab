@@ -80,7 +80,7 @@ clean_up() {
             kill -TERM "$pid"
             sleep 5
             if kill -0 "$pid"; then
-                "Process $pid still running, trying sigkill"
+                echo "Process $pid still running, trying sigkill"
                 kill -9 "$pid"
             fi
         done
@@ -103,7 +103,7 @@ process_file () {
         fi
         file="${DIR}"/"$1"
         echo "Compressing $file"
-        gzip -c  > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
+        gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
         echo "Hashing ${file}.gz"
         hash=$(sha256sum "${file}".gz)
         if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
@@ -123,7 +123,7 @@ while read -r file; do
         if [ -n "$MAX_JOBS" ]; then 
             nprocs="$MAX_JOBS"
         else
-            nprocs=$(nprocs)
+            nprocs=$(nproc)
         fi
         while (( $(jobs -rp | wc -l) >= "$nprocs" )); do
             wait -n
