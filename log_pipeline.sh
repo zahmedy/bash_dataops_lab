@@ -73,7 +73,7 @@ clean_up() {
             if [[ $difference -gt 3600 ]]; then
                 rm -f "$file"
             fi
-            rm -f "${DIR}/*.tmp"
+            rm -f "${DIR}"/*.tmp
         done
         shopt -u nullglob
         for pid in "${pids[@]}"; do
