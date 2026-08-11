@@ -77,7 +77,7 @@ clean_up() {
         done
         shopt -u nullglob
         for pid in "${pids[@]}"; do
-            SIGTERM "$pid"
+            kill -TERM "$pid"
             sleep 5
             if kill -0 "$pid"; then
                 "Process $pid still running, trying sigkill"
