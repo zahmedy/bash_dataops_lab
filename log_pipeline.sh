@@ -138,7 +138,7 @@ process_file () {
             fi
         fi
         
-        file="${DIR}"/"$1"
+        local file="$1"
         corrupt_dir="$DIR/.corrupt"
         if [[ ! -d $corrupt_dir ]]; then
             if ! mkdir -p "$corrupt_dir"; then
@@ -171,7 +171,7 @@ process_file () {
             if ! grep -r "^$hash" "$tmp_file"; then
                 gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
                 sha256sum "${file}.gz" 
-                printf '%s %s\n' "$hash" "$file" >> "$tmp_file"
+                ( flock 201; printf '%s %s\n' "$hash" "$file" >> "$tmp_file") 201>"${tmp_file}.lock"
             else
                 echo "$file already processed"
             fi
@@ -186,7 +186,7 @@ process_file () {
 
 while read -r file; do
         nprocs=0
-        if [ -n "$MAX_JOBS" ]; then 
+        if [[ "$MAX_JOBS" -gt 0 ]]; then 
             nprocs="$MAX_JOBS"
         else
             nprocs=$(nproc)
@@ -202,6 +202,6 @@ while read -r file; do
         done
         process_file "$file" &
         pids+=($!)
-done < <(find "${DIR}" -maxdepth 1 -type file -name "*.log")
+done < <(find "${DIR}" -maxdepth 1 -type f -name "*.log")
 
 echo "All files in $DIR processed successfully"
