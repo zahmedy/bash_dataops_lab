@@ -78,7 +78,7 @@ clean_up() {
         done
         shopt -u nullglob
         for pid in "${pids[@]}"; do
-            kill -TERM "$pid"
+            kill -TERM "$pid" 2>/dev/null || true
         done
         sleep 5
         for pid in "${pids[@]}"; do
@@ -151,10 +151,6 @@ process_file () {
         corrupted=false
         while read -r line; do
             [[ -z "$line" ]] && continue
-            
-            if echo "$line" | jq -e . >/dev/null 2>&1; then
-                continue
-            fi
 
             if [[ "$line" =~ $SYSLOG_REGEX ]]; then 
                 continue
