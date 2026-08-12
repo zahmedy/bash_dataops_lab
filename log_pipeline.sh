@@ -92,6 +92,39 @@ clean_up() {
 trap clean_up INT TERM EXIT
 
 ###########################
+# Upload
+###########################
+
+simulate_upload() {
+    echo "Uploading to S3"
+    if (( RANDOM % 10 < 3 )); then 
+        return 1
+    fi
+    echo "upload ok"
+    return 0
+}
+
+upload_with_retry() {
+    local batch="$1"
+    local attempt delay jitter
+
+    for attempt in 1 2 3; do
+        if simulate_upload; then
+            return 0
+        fi
+
+        jitter=$((RANDOM % 3))
+        delay=$((2 ** attempt + jitter))
+        echo "upload failed for $batch, retrying in ${delay}s" >&2
+        sleep "$delay"
+    done
+
+    touch "${batch}.failed"
+    echo "upload failed for $batch after 3 retries" >&2
+    return 1
+}
+
+###########################
 # Worker
 ###########################
 
