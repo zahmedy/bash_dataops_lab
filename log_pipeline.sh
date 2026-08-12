@@ -97,10 +97,10 @@ trap clean_up INT TERM EXIT
 
 process_file () {
         # check if dir exist
-        tmp_dir="$DIR/.hashed_files"
-        if [[ ! -d $tmp_dir ]]; then
-            if ! mkdir -p "$tmp_dir"; then
-                echo "Error: enable to create $tmp_dir"
+        tmp_file="$DIR/.processed_manifest"
+        if [[ ! -f $tmp_file ]]; then
+            if ! touch "$tmp_file"; then
+                echo "Error: enable to create $tmp_file"
                 exit 1
             fi
         fi
@@ -133,12 +133,12 @@ process_file () {
         done < "$file"
 
         if [[ "$corrupted" == "false" ]]; then
-            echo "Compressing $file"
-            gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
-            echo "Hashing ${file}.gz"
-            hash=$(sha256sum "${file}".gz | cut -d' ' -f1)
-            if [[ ! -f "$tmp_dir"/"$hash" ]]; then 
-                sha256sum "${file}".gz "$tmp_dir"/"${file}".gz.sha256
+            hash=$(sha256sum "${file}" | cut -d' ' -f1)
+            
+            if ! grep -r "^$hash" "$tmp_file"; then
+                gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
+                sha256sum "${file}.gz" 
+                printf '%s %s\n' "$hash" "$file" >> "$tmp_file"
             else
                 echo "$file already processed"
             fi
