@@ -175,11 +175,12 @@ process_file () {
             else
                 echo "$file already processed"
             fi
-            echo "Copying compressed logs in ${DIR} to remote storage"
-            for hash_file in "$tmp_dir"/*; do
-                scp "$hash_file" "$S3"
-            done
-            echo "Complete"
+            batch=$((RANDOM))
+            if upload_with_retry "batch_${batch}"; then
+                echo "Complete"
+            else
+                echo "Batch ${batch} failed"
+            fi
         fi
 }
 
