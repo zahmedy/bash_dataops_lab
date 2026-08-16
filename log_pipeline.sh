@@ -80,13 +80,24 @@ clean_up() {
         for pid in "${pids[@]}"; do
             kill -TERM "$pid" 2>/dev/null || true
         done
-        sleep 5
+        local active_pids=()
         for pid in "${pids[@]}"; do
-            if kill -0 "$pid"; then
-                echo "Process $pid still running, trying sigkill"
-                kill -9 "$pid"
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -TERM "$pid" 2>/dev/null || true
+                active_pids+=("$pid")
             fi
         done
+
+        # Only penalize with a 5-second sleep if we actually killed something
+        if (( ${#active_pids[@]} > 0 )); then
+            sleep 5
+            for pid in "${active_pids[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    echo "Process $pid still running, issuing SIGKILL"
+                    kill -9 "$pid" 2>/dev/null || true
+                fi
+            done
+        fi
 }
 
 trap clean_up INT TERM EXIT
