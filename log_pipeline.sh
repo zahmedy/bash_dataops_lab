@@ -202,6 +202,9 @@ while read -r file; do
         pids+=($!)
 done < <(find "${DIR}" -maxdepth 1 -type f -name "*.log")
 
+# Block until the final batch of workers finishes 
 wait
+# Clear the PID array so the EXIT trap doesn't try to kill them or sleep
+pids=()
 
 echo "All files in $DIR processed successfully"
