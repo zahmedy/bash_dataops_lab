@@ -164,7 +164,7 @@ process_file () {
         if [[ "$corrupted" == "false" ]]; then
             hash=$(sha256sum "${file}" | cut -d' ' -f1)
             
-            if ! grep -r "^$hash" "$tmp_file"; then
+            if ! grep -q "^$hash" "$tmp_file"; then
                 gzip -c  "$file" > "${file}.tmp" && mv "${file}.tmp" "${file}.gz"
                 sha256sum "${file}.gz" 
                 ( flock 201; printf '%s %s\n' "$hash" "$file" >> "$tmp_file") 201>"${tmp_file}.lock"
@@ -177,6 +177,8 @@ process_file () {
             else
                 echo "Batch ${batch} failed"
             fi
+        else
+            mv "$file" "$corrupt_dir/"
         fi
 }
 
