@@ -74,9 +74,9 @@ clean_up() {
             if [[ $difference -gt 3600 ]]; then
                 rm -f "$file"
             fi
-            rm -f "${DIR}"/*.tmp
         done
         shopt -u nullglob
+        rm -f "${DIR}"/*.tmp
         for pid in "${pids[@]}"; do
             kill -TERM "$pid" 2>/dev/null || true
         done
@@ -201,5 +201,7 @@ while read -r file; do
         process_file "$file" &
         pids+=($!)
 done < <(find "${DIR}" -maxdepth 1 -type f -name "*.log")
+
+wait
 
 echo "All files in $DIR processed successfully"
